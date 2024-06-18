@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-type Interface interface {
+type CacheInterface interface {
 	Get(string) (Value, *time.Time, bool) // 根据 key 获取值
 	Add(string, Value)                    // 添加键值对
 	CleanUp(ttl time.Duration)            // 清理过期数据
@@ -38,7 +38,7 @@ func (ele *entry) touch() {
 	ele.updateAt = &nowTime
 }
 
-func New(name string, maxBytes int64, onEvicted func(string, Value)) Interface {
+func New(name string, maxBytes int64, onEvicted func(string, Value)) CacheInterface {
 	switch name {
 	case "fifo":
 		return newFIFOCache(maxBytes, onEvicted)
