@@ -1,13 +1,13 @@
 package distributekv
 
 import (
-	"ggcache-plus/distributekv/lru"
+	"ggcache-plus/distributekv/policy"
 	"sync"
 )
 
 type cache struct {
 	mu         sync.Mutex
-	lru        *lru.Cache
+	lru        *policy.Cache
 	cacheBytes int64
 }
 
@@ -18,7 +18,7 @@ func (c *cache) add(key string, value ByteView) {
 	// 这种方法称之为延迟初始化(Lazy Initialization)，一个对象的延迟初始化意味着该对象的创建将会延迟至第一次使用该对象时。
 	// 主要用于提高性能，并减少程序内存要求
 	if c.lru == nil {
-		c.lru = lru.New(c.cacheBytes, nil)
+		c.lru = policy.New(c.cacheBytes, nil)
 	}
 	c.lru.Add(key, value)
 }
