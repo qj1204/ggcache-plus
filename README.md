@@ -98,11 +98,11 @@ go install github.com/mattn/goreman@latest
 goreman -f Procfile start
 ```
 
-![QQ截图20240625210820](resources\README\QQ截图20240625210820.png)
+![QQ截图20240625210820](resources/README/QQ截图20240625210820.png)
 
 查看成员状态
 
-![QQ截图20240625211120](resources\README\QQ截图20240625211120.png)
+![QQ截图20240625211120](resources/README/QQ截图20240625211120.png)
 
 2、将三个服务节点的信息保存到 etcd 集群中
 
@@ -113,7 +113,7 @@ cd ../server_register_to_etcd
 go run put1/client_put1.go && go run put2/client_put2.go && go run  put3/client_put3.go
 ```
 
-![QQ截图20240625211304](resources\README\QQ截图20240625211304.png)
+![QQ截图20240625211304](resources/README/QQ截图20240625211304.png)
 
 查询是否成功
 
@@ -121,7 +121,7 @@ go run put1/client_put1.go && go run put2/client_put2.go && go run  put3/client_
 etcdctl get clusters --prefix
 ```
 
-![QQ截图20240625211402](resources\README\QQ截图20240625211402.png)
+![QQ截图20240625211402](resources/README/QQ截图20240625211402.png)
 
 3、启动自动化测试脚本
 
@@ -139,19 +139,19 @@ chmod +x run.sh
 
 - 后端数据库、缓存初始数据写入成功 
 
-![QQ截图20240625211815](resources\README\QQ截图20240625211815.png)
+![QQ截图20240625211815](resources/README/QQ截图20240625211815.png)
 
 - 集群节点的信息存储成功
 
-![QQ截图20240625212115](resources\README\QQ截图20240625212115.png)
+![QQ截图20240625212115](resources/README/QQ截图20240625212115.png)
 
-![QQ截图20240625212238](resources\README\QQ截图20240625212238.png)
+![QQ截图20240625212238](resources/README/QQ截图20240625212238.png)
 
-![QQ截图20240625212016](resources\README\QQ截图20240625212016.png)
+![QQ截图20240625212016](resources/README/QQ截图20240625212016.png)
 
 - 超时节点将被踢出集群（keep-alive 心跳机制，可以自定义 TTL）
 
-![QQ截图20240625212335](resources\README\QQ截图20240625212335.png)
+![QQ截图20240625212335](resources/README/QQ截图20240625212335.png)
 
 现在服务启动成功，我们可以运行测试脚本（开一个新的终端）：
 
@@ -161,10 +161,10 @@ chmod +x test.sh
 ```
 
 单次 RPC 请求调用的响应：
-![QQ图片20240625212739](resources\README\QQ图片20240625212739.png)
+![QQ图片20240625212739](resources/README/QQ图片20240625212739.png)
 
 基于服务注册发现，循环发起 RPC 请求调用结果：
-![QQ截图20240625212834](resources\README\QQ截图20240625212834.png)
+![QQ截图20240625212834](resources/README/QQ截图20240625212834.png)
 
 
 ## 执行日志分析
@@ -177,29 +177,29 @@ chmod +x test.sh
 
 ### 缓存未命中（用的原作者的图）
 
-![2023-09-19-15-19-33](resources\README\2023-09-19-15-19-33.png)
+![2023-09-19-15-19-33](resources/README/2023-09-19-15-19-33.png)
 
 > 第一个 RPC 请求到达后，第二个节点（localhost:10000）接收到，一致性 hash 模块计算 key 的 hash 值，得到 2453906684 ，然后去哈希环上顺时针找大于等于这个 hash 值的首个虚拟节点，找到了哈希环上的第 74 个节点（对应下标 idx=73）；然后再去查虚拟节点和真实节点的映射表，发现这个虚拟节点对应的真实节点正是第二个节点（localhost:10000）；即由该节点负责处理这个 RPC 请求，因为缓存中还没有这个 key 的缓存，所以需要从数据库中查询，然后将查询结果写入缓存，并返回给客户端。（对照日志输出理解）
 
 ### 请求转发
 
-![QQ截图20240625211402](resources\README\QQ截图20240625211402.png)
+![QQ截图20240625211402](resources/README/QQ截图20240625211402.png)
 
 > RPC 请求由第一个节点（localhost:10001）接收到，一致性 hash 模块计算后将 key 打到了第三个节点上（localhost:10003），第一个节点将请求转发给第三个节点处理（pick remote peer）。
 
 查看第三个节点日志，发现它收到了来自第一个节点的转发请求。
 
-![QQ截图20240627001214](resources\README\QQ截图20240627001214.png)
+![QQ截图20240627001214](resources/README/QQ截图20240627001214.png)
 
 日志内容很详细：收到转发的请求、根据一致性 hash 算法计算出真实节点（发现就是自己）、从后端数据库查询 'key=张三' 的值，返回 333、最终客户端收到 RPC 响应；
 
-![QQ截图20240627001337](resources\README\QQ截图20240627001337.png)
+![QQ截图20240627001337](resources/README/QQ截图20240627001337.png)
 
 ### 缓存命中
 
 我们已经将 'key=张三' 的成绩存入到节点 3 的缓存中了，按照正常处理逻辑，下一次查询时应该先转发到节点3，然后在 节点3 上走缓存而不是慢速数据库，我们再发起一次请求：
 
-![QQ截图20240627001739](resources\README\QQ截图20240627001739.png)
+![QQ截图20240627001739](resources/README/QQ截图20240627001739.png)
 
 根据日志输出可知：一致性 hash 算法将相同的 key 打到了相同的节点上（一致性 hash 算法有效），同样的，节点 1 成功将 RPC 请求转发给了节点 3（分布式节点集群通信正常）；
 
@@ -207,7 +207,7 @@ chmod +x test.sh
 
 节点 3 的日志：
 
-![QQ截图20240627001540](resources\README\QQ截图20240627001540.png)
+![QQ截图20240627001540](resources/README/QQ截图20240627001540.png)
 
 ## 总结
 

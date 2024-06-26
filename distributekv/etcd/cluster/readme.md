@@ -24,7 +24,7 @@
 
 > etcdctl --write-out=table --endpoints=localhost:2379 member list
 
-![QQ截图20240627002845](..\..\..\resources\README\QQ截图20240627002845.png)
+![QQ截图20240627002845](../../../resources/README/QQ截图20240627002845.png)
 
 ## Store an key-value pair in the cluster
 

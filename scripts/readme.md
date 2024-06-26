@@ -10,7 +10,7 @@
 
 > ./test.sh
 
-![QQ截图20240627002502](..\resources\README\QQ截图20240627002502.png)
+![QQ截图20240627002502](../resources/README/QQ截图20240627002502.png)
 
 # 问题
 
