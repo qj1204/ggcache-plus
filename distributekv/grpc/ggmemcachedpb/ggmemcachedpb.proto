@@ -1,0 +1,17 @@
+syntax = "proto3";
+package ggmemcachedpb;
+
+option go_package = "./;ggmemcachedpb";  // 生成在当前目录下，包名为ggmemcachedpb
+
+message Request {
+  string group = 1;
+  string key = 2;
+}
+
+message Response {
+  bytes value = 1;
+}
+
+service GroupCache {
+  rpc Get(Request) returns (Response);
+}

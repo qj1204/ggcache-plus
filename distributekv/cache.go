@@ -2,6 +2,7 @@ package distributekv
 
 import (
 	"ggcache-plus/distributekv/policy"
+	"ggcache-plus/global"
 	"sync"
 )
 
@@ -9,6 +10,12 @@ type cache struct {
 	mu         sync.Mutex
 	lru        policy.CacheInterface
 	cacheBytes int64
+}
+
+func newCache(cacheBytes int64) *cache {
+	return &cache{
+		cacheBytes: cacheBytes,
+	}
 }
 
 func (c *cache) add(key string, value ByteView) {
@@ -20,18 +27,19 @@ func (c *cache) add(key string, value ByteView) {
 	if c.lru == nil {
 		c.lru = policy.New("lru", c.cacheBytes, nil)
 	}
+	global.Log.Infof("添加缓存(%s, %s)", key, value)
 	c.lru.Add(key, value)
 }
 
-func (c *cache) get(key string) (value ByteView, ok bool) {
+func (c *cache) get(key string) (ByteView, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.lru == nil {
-		return
+		c.lru = policy.New("lru", c.cacheBytes, nil)
 	}
 
 	if v, _, ok := c.lru.Get(key); ok {
 		return v.(ByteView), true
 	}
-	return
+	return ByteView{}, false
 }

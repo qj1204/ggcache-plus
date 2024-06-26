@@ -1,0 +1,19 @@
+mysql:
+  host: 127.0.0.1
+  port: 3306
+  config: charset=utf8mb4&parseTime=True&loc=Local
+  db: ggcache_plus
+  user: root
+  password: 123456
+logger_setting:
+  level: info
+  prefix: ggmemcached
+  director: log
+  show_line: true
+  log_in_console: true
+#etcd:
+#  address:
+#    - localhost:2379
+#    - localhost:2380
+#    - localhost:2381
+#  user: root

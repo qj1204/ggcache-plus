@@ -1,6 +1,7 @@
 package consistenthash
 
 import (
+	"ggcache-plus/global"
 	"hash/crc32"
 	"sort"
 	"strconv"
@@ -13,28 +14,27 @@ type Hash func(data []byte) uint32
 type Map struct {
 	hash     Hash           // 哈希函数
 	replicas int            // 虚拟节点倍数
-	keys     []int          // 哈希环 keys
+	keys     []int          // 哈希环虚拟节点
 	hashMap  map[int]string // 虚拟节点与真实节点的映射表，键是虚拟节点的哈希值，值是真实节点的名称
 }
 
 // New creates a Map instance
-func New(replicas int, fn Hash) *Map {
-	m := &Map{
+func New(replicas int, hash Hash) *Map {
+	if hash == nil {
+		hash = crc32.ChecksumIEEE
+	}
+	return &Map{
 		replicas: replicas,
-		hash:     fn,
-		hashMap:  make(map[int]string),
+		hash:     hash,
+		hashMap:  map[int]string{},
 	}
-	if m.hash == nil {
-		m.hash = crc32.ChecksumIEEE
-	}
-	return m
 }
 
 // Add 往哈希环中添加节点（实际上添加的是虚拟节点）
 func (m *Map) Add(keys ...string) {
 	for _, key := range keys {
 		for i := 0; i < m.replicas; i++ {
-			hash := int(m.hash([]byte(strconv.Itoa(i) + key)))
+			hash := int(m.hash([]byte(key + strconv.Itoa(i))))
 			m.keys = append(m.keys, hash)
 			m.hashMap[hash] = key
 		}
@@ -42,8 +42,8 @@ func (m *Map) Add(keys ...string) {
 	sort.Ints(m.keys)
 }
 
-// Get 获取哈希环中最接近提供的键的节点
-func (m *Map) Get(key string) string {
+// GetTruthNode 获取哈希环中最接近提供的键的节点
+func (m *Map) GetTruthNode(key string) string {
 	if len(m.keys) == 0 {
 		return ""
 	}
@@ -53,5 +53,9 @@ func (m *Map) Get(key string) string {
 	idx := sort.Search(len(m.keys), func(i int) bool {
 		return m.keys[i] >= hash
 	})
+
+	global.Log.Infof("计算出 key:%s 的 hash: %d, 顺时针选择的虚拟节点下标 idx: %d", key, hash, idx)
+	global.Log.Infof("选择的真实节点：%s", m.hashMap[m.keys[idx%len(m.keys)]])
+
 	return m.hashMap[m.keys[idx%len(m.keys)]]
 }
