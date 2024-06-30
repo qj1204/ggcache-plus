@@ -2,9 +2,15 @@
 
 ## 项目介绍
 
-仿照groupcache框架，实现一个支持 HTTP、RPC 和服务注册发现的分布式kv缓存系统
+仿照groupcache框架，实现一个支持 HTTP、RPC 和服务注册发现的分布式kv缓存系统（Linux运行）
 
-## 功能扩展
+支持高可用的服务注册发现
+
+支持动态节点管理和网络拓扑快速收敛的分布式键值缓存系统
+
+## 功能介绍
+
+v1.0
 
 - 支持 RPC （遵循 gRPC 框架）
 - 支持多种缓存淘汰策略灵活替换（LRU、LFU、FIFO）
@@ -14,69 +20,73 @@
 - 支持负载均衡和并发访问控制
 - 提供了自动化测试脚本
 
+v2.0
+
+- 增加 TTL 机制（ 单独一个 goroutine），自动清理过期缓存
+- 使用 endpoint manager 和 watch channel 实现类似于服务订阅发布的能力
+- 使用类似于事件回调的处理机制，根据节点的 PUT、DEL 事件更新节点状态
+- 实现秒级节点之间拓扑结构的快速收敛（动态节点管理）
+- 增加 grpc client 测试重试逻辑
+- 增加缓存穿透的防御策略（将不存在的 key 的空值存到缓存中，设置合理过期时间，防止不存在的 key 的大量并发请求打穿数据库）
+
 ## 功能优化方向（todo）
 
 1. 添加缓存命中率指标（动态调整缓存容量）
-2. 自动检测服务节点信息变化，动态增删节点
-3. 增加更多的负载均衡策略（轮询等）
-4. 增加请求限流（令牌桶算法）
-5. 增加 ARC 缓存淘汰算法
-6. 增加 TTL
-7. 重构项目
-   ...
+2. 增加请求限流（令牌桶算法）
+3. 增加 ARC 缓存淘汰算法、LRU算法升级
+4. 现缓存和数据库的一致性（增加消息队列异步处理）（也可以通过缓存淘汰时的回调函数实现）
 
-# 项目结构
+...
+
+## 项目结构
 
 ```
 .
-├── config									// 日志和 mysql 配置
-│   ├── conf_logger.go
-│   ├── conf_mysql.go
-│   └── enter.go
-├── core									// 读取配置文件，配置logrus和gorm
+├── config									// 日志、mysql、etcd、ggroupcache配置
+├── core									// 读取配置文件，配置logrus、gorm和etcd
 ├── distributekv							// 分布式键值存储系统
 │   ├── byteview.go							// 一个只读的数据结构，表示缓存值
 │   ├── cache.go							// 支持缓存淘汰策略的底层缓存
-│   ├── client.go							// gRPC 客户端实现
 │   ├── consistenthash						// 一致性 hash 算法（负载均衡）
 │   ├── etcd
 │   │   ├── cluster							// etcd 3 节点集群
 │   │   ├── discover.go						// 服务发现
-│   │   ├── getServicesAddrs.go				// 获取节点信息
-│   │   ├── register.go						// 服务注册（阻塞）
-│   │   └── server_register_to_etcd			// 将服务节点信息注册到 etcd
-│   ├── ggmemcached.go						// 对底层缓存的封装（资源隔离、并发安全）
+│   │   └── register.go						// 服务注册
+│   ├── ggroupcache.go						// 对底层缓存的封装（资源隔离、并发安全）
 │   ├── group.go							// 测试用的数据库和缓存数据
-│   ├── grpc
-│   │   ├── ggmemcachedpb					// gRPC 
-│   │   ├── rpcCallClient					// 简单 RPC 调用
-│   │   └── serviceRegisterCall				// RPC 调用（以服务发现的方式）
+│   ├── grpc								// 节点间grpc通信
+│   │   ├── client.go						// grpc服务端
+│   │   ├── ggroupcachepb					// gRPC protobuf
+│   │   └── server.go						// grpc客户端
+│   ├── http								// 节点间http通信
+│   │   ├── client.go						// http客户端
+│   │   ├── http_helper.go
+│   │   └── server.go						// http服务端
 │   ├── peers.go							// 节点相关接口
-│   ├── policy
-│   │   ├── enter.go						// 使用策略模式
-│   │   ├── fifo.go							// FIFO 淘汰策略
-│   │   ├── lfu.go							// LFU 淘汰策略（高级局部性）
-│   │   ├── lru.go							// LRU 淘汰策略（基本局部性）
-│   │   ├── priority_queue.go				// 基于堆实现的优先队列
-│   ├── server.go							// gRPC 服务端实现
-│   └── singleflight						// 并发请求处理优化（协程编排）
+│   ├── policy								// 缓存淘汰策略
+│   │   ├── enter.go
+│   │   ├── fifo.go
+│   │   ├── lfu.go
+│   │   ├── lru.go
+│   │   ├── priority_queue.go
+│   └── singleflight						// 并发请求处理优化（防止缓存击穿）
 ├── flags									// 命令行参数
 ├── global									// 全局变量
 ├── go.mod
 ├── go.sum
+├── grpc_client.go							// 节点间grpc通信测试
 ├── log										// 日志
-├── main.go
+├── main2.go								// 节点间http通信main
+├── main.go									// 节点间grpc通信main
 ├── models									// 数据库数据模型
 ├── README.md
+├── resources								// 图片资源
 ├── scripts									// 自动化测试脚本
-│   ├── build
-│   ├── run.sh
-│   ├── readme.md							// 脚本使用指南
-│   └── test.sh
+│   ├── http								// 节点间http通信测试脚本
+│   ├── readme.md
 ├── settings.yaml							// 配置文件
-├── testdata								// 测试文件
+├── testdata								// 普通测试函数
 └── utils									// 工具函数
-
 ```
 
 
@@ -104,67 +114,28 @@ goreman -f Procfile start
 
 ![QQ截图20240625211120](resources/README/QQ截图20240625211120.png)
 
-2、将三个服务节点的信息保存到 etcd 集群中
-
-进入 server_register_to_etcd 
+2、启动服务节点
 
 ```bash
-cd ../server_register_to_etcd
-go run put1/client_put1.go && go run put2/client_put2.go && go run  put3/client_put3.go
-```
-
-![QQ截图20240625211304](resources/README/QQ截图20240625211304.png)
-
-查询是否成功
-
-```bash
-etcdctl get clusters --prefix
-```
-
-![QQ截图20240625211402](resources/README/QQ截图20240625211402.png)
-
-3、启动自动化测试脚本
-
-- 启动 3 个服务节点
-- 发起单次 RPC 请求
-- 基于服务注册发现，循环发起 RPC 请求
-
-进入 script 目录，依次执行
-
-```bash
-cd ../../../scripts
-chmod +x run.sh
-./run.sh
+# 开三个终端分别执行：
+go run main.go -port 10001
+go run main.go -port 10002
+go run main.go -port 10003
 ```
 
 - 后端数据库、缓存初始数据写入成功 
 
-![QQ截图20240625211815](resources/README/QQ截图20240625211815.png)
+![QQ截图20240630150031](resources/README/QQ截图20240630150031.png)
 
-- 集群节点的信息存储成功
+在秒级获取到节点信息变化，快速收敛
 
-![QQ截图20240625212115](resources/README/QQ截图20240625212115.png)
-
-![QQ截图20240625212238](resources/README/QQ截图20240625212238.png)
-
-![QQ截图20240625212016](resources/README/QQ截图20240625212016.png)
-
-- 超时节点将被踢出集群（keep-alive 心跳机制，可以自定义 TTL）
-
-![QQ截图20240625212335](resources/README/QQ截图20240625212335.png)
-
-现在服务启动成功，我们可以运行测试脚本（开一个新的终端）：
+现在服务启动成功，可以执行grpc_client.go（开一个新的终端）：
 
 ```bash
-chmod +x test.sh
-./test.sh
+go run grpc_client.go
 ```
 
-单次 RPC 请求调用的响应：
-![QQ图片20240625212739](resources/README/QQ图片20240625212739.png)
-
-基于服务注册发现，循环发起 RPC 请求调用结果：
-![QQ截图20240625212834](resources/README/QQ截图20240625212834.png)
+![QQ截图20240630150512](resources/README/QQ截图20240630150512.png)
 
 
 ## 执行日志分析
@@ -208,6 +179,29 @@ chmod +x test.sh
 节点 3 的日志：
 
 ![QQ截图20240627001540](resources/README/QQ截图20240627001540.png)
+
+### 清理过期缓存
+
+![QQ截图20240630150906](resources/README/QQ截图20240630150906.png)
+
+## 节点间采用http协议通信
+
+启动服务节点
+
+```bash
+# 开三个终端分别执行：
+go run main2.go -port 10001
+go run main2.go -port 10002
+go run main2.go -port 10003 -api
+```
+
+在开一个新终端执行
+
+```bash
+curl "http://localhost:8000/api?key=张三"
+```
+
+
 
 ## 总结
 

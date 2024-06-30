@@ -14,7 +14,7 @@ var db = map[string]string{
 
 func TestGet(t *testing.T) {
 	loadCounts := make(map[string]int, len(db))
-	group := NewGroup("scores", 2<<10, RetrieverFunc(
+	group := NewGroup("scores", "lru", 2<<10, RetrieverFunc(
 		func(key string) ([]byte, error) {
 			log.Println("[SlowDB] search key", key)
 			if v, ok := db[key]; ok {

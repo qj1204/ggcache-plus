@@ -7,13 +7,21 @@ mysql:
   password: 123456
 logger_setting:
   level: info
-  prefix: ggmemcached
+  prefix: GGroupCache
   director: log
   show_line: true
   log_in_console: true
-#etcd:
-#  address:
-#    - localhost:2379
-#    - localhost:2380
-#    - localhost:2381
-#  user: root
+ggroupcache:
+  name: GGroupCache
+  addr:
+    - localhost:10001
+    - localhost:10002
+    - localhost:10003
+  ttl: 30
+  clean_up_interval: 1 # minute
+etcd:
+  address:
+    - localhost:2379
+    - localhost:22379
+    - localhost:32379
+  ttl: 5                   # second

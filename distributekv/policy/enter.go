@@ -23,11 +23,11 @@ type entry struct {
 }
 
 // expired 判断是否过期
-func (ele *entry) expired(duration time.Duration) (ok bool) {
+func (ele *entry) expired(ttl time.Duration) (ok bool) {
 	if ele.updateAt == nil {
 		ok = false
 	} else {
-		ok = ele.updateAt.Add(duration).Before(time.Now())
+		ok = ele.updateAt.Add(ttl).Before(time.Now())
 	}
 	return
 }

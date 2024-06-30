@@ -1,21 +1,23 @@
-package distributekv
+package grpc
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"ggcache-plus/distributekv"
 	"ggcache-plus/distributekv/consistenthash"
 	"ggcache-plus/distributekv/etcd"
-	pb "ggcache-plus/distributekv/grpc/ggmemcachedpb"
+	pb "ggcache-plus/distributekv/grpc/ggroupcachepb"
 	"ggcache-plus/global"
 	"ggcache-plus/utils"
 	"google.golang.org/grpc"
 	"net"
 	"strings"
 	"sync"
+	"time"
 )
 
-// server 模块为 ggmemcached 之间提供了通信能力
+// server 模块为 ggroupcache 之间提供了通信能力
 // 这样部署在其他机器上的 ggmemcached 可以通过 server 获取缓存
 // 至于找哪一个主机，由一致性 hash 负责
 const (
@@ -31,16 +33,17 @@ type Server struct {
 	mu          sync.Mutex
 	consHash    *consistenthash.Map
 	grpcClients map[string]*grpcClient
+	update      chan bool
 }
 
-func NewServer(addr string) (*Server, error) {
+func NewServer(update chan bool, addr string) (*Server, error) {
 	if addr == "" {
 		addr = defaultAddr
 	}
 	if !utils.IsValidPerrAddr(addr) {
 		return nil, errors.New(fmt.Sprintf("无效地址 %s，格式应为：ip:port", addr))
 	}
-	return &Server{addr: addr}, nil
+	return &Server{addr: addr, update: update}, nil
 }
 
 // Get 实现了GroupCacheServer接口的Get方法
@@ -53,11 +56,11 @@ func (s *Server) Get(ctx context.Context, req *pb.Request) (*pb.Response, error)
 		return resp, errors.New("group和key不能为空！")
 	}
 
-	g := GetGroup(group)
+	g := distributekv.GetGroup(group)
 	global.Log.Info("group的名字为：", group)
 	if g == nil {
 		global.Log.Errorf("没有名为 %s 的group", group)
-		return resp, errors.New(fmt.Sprintf("group %s not found", group))
+		return resp, errors.New(fmt.Sprintf("没有名为 %s 的group", group))
 	}
 	value, err := g.Get(key)
 	if err != nil {
@@ -80,12 +83,45 @@ func (s *Server) SetPeers(peerAddrs []string) {
 		if !utils.IsValidPerrAddr(peerAddr) {
 			panic(fmt.Sprintf("peer %s 的地址格式无效，应为 ip:port", peerAddr))
 		}
-		s.grpcClients[peerAddr] = NewClient(fmt.Sprintf("ggmemcached/%s", peerAddr))
+		s.grpcClients[peerAddr] = &grpcClient{serviceName: fmt.Sprintf("%s/%s", global.Config.GGroupCache.Name, peerAddr)}
 	}
+	go func() {
+		for {
+			select {
+			case <-s.update: // 节点数量发生变化（新增或者删除）整个负载均衡视图需要动态修改
+				s.reconstruct()
+			case <-s.stopsSignal:
+				s.Stop()
+			default:
+				time.Sleep(time.Second * 2)
+			}
+		}
+	}()
+}
+
+func (s *Server) reconstruct() {
+	serviceList, err := etcd.ListServicePeers(global.Config.GGroupCache.Name)
+	if err != nil { // 如果没有拿到服务实例列表，暂时先维持当前视图
+		return
+	}
+
+	s.mu.Lock()
+	s.consHash = consistenthash.New(defaultReplicas, nil)
+	s.consHash.Add(serviceList...)
+	s.grpcClients = make(map[string]*grpcClient)
+
+	for _, peerAddr := range serviceList {
+		if !utils.IsValidPerrAddr(peerAddr) {
+			panic(fmt.Sprintf("[%s] 无效的地址格式，应为：x.x.x.x:port", peerAddr))
+		}
+		s.grpcClients[peerAddr] = &grpcClient{serviceName: fmt.Sprintf("%s/%s", global.Config.GGroupCache.Name, peerAddr)}
+	}
+	s.mu.Unlock()
+	global.Log.Infof("哈希环重构，现包含服务节点：%v", serviceList)
 }
 
 // Pick 根据一致性哈希选出 key 应该存放在的 cache
-func (s *Server) Pick(key string) (Fetcher, bool) {
+func (s *Server) Pick(key string) (distributekv.Fetcher, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	peerAddr := s.consHash.GetTruthNode(key)
@@ -103,7 +139,7 @@ func (s *Server) Start() error {
 
 	if s.status {
 		s.mu.Unlock()
-		return errors.New(fmt.Sprintf("服务 %s 已经启动", s.addr))
+		return errors.New(fmt.Sprintf("服务 [%s] 已经启动", s.addr))
 	}
 
 	// ------------启动服务----------------
@@ -120,13 +156,14 @@ func (s *Server) Start() error {
 	if err != nil {
 		return errors.New(fmt.Sprintf("未能监听 %s，错误：%v", s.addr, err))
 	}
+
 	grpcServer := grpc.NewServer()
-	pb.RegisterGroupCacheServer(grpcServer, s)
+	pb.RegisterGGroupCacheServer(grpcServer, s)
 
 	// 注册服务至 etcd
 	go func() {
 		// Register never return unless stop signal received (blocked)
-		err := etcd.Register("ggmemcached", s.addr, s.stopsSignal)
+		err := etcd.Register(global.Config.GGroupCache.Name, s.addr, s.stopsSignal)
 		if err != nil {
 			global.Log.Error("注册错误：", err.Error())
 		}
@@ -148,4 +185,20 @@ func (s *Server) Start() error {
 		return errors.New(fmt.Sprintf("failed to serve %s, error: %v", s.addr, err))
 	}
 	return nil
+}
+
+func (s *Server) Stop() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.status {
+		return
+	}
+
+	// notify registry to stop release keepalive
+	s.stopsSignal <- nil
+	// change server running status
+	s.status = false
+	s.grpcClients = nil // help GC
+	s.consHash = nil
 }

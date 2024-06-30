@@ -4,6 +4,7 @@ import (
 	"errors"
 	"ggcache-plus/distributekv/singleflight"
 	"ggcache-plus/global"
+	"gorm.io/gorm"
 	"sync"
 )
 
@@ -30,14 +31,14 @@ type Group struct {
 }
 
 // NewGroup 创建一个缓存命名空间
-func NewGroup(name string, cacheBytes int64, retriever Retriever) *Group {
+func NewGroup(name string, strategy string, cacheBytes int64, retriever Retriever) *Group {
 	if retriever == nil {
 		panic("Retriever 不能为空！")
 	}
 	g := &Group{
 		name:      name,
 		retriever: retriever,
-		mainCache: newCache(cacheBytes),
+		mainCache: newCache(strategy, cacheBytes),
 		loader:    &singleflight.SingleFlight{},
 	}
 	mu.Lock()
@@ -77,7 +78,7 @@ func (g *Group) Get(key string) (ByteView, error) {
 // load 先从远端获取数据，没有的话再调用 getLocally 从本地获取数据
 func (g *Group) load(key string) (ByteView, error) {
 	// 无论并发调用者的数量如何，每个键只被获取一次(本地或远程)
-	view, err := g.loader.Do(key, func() (any, error) {
+	val, err := g.loader.Do(key, func() (any, error) {
 		if g.peers != nil {
 			if peer, ok := g.peers.Pick(key); ok {
 				bytes, err := peer.Fetch(g.name, key)
@@ -90,7 +91,7 @@ func (g *Group) load(key string) (ByteView, error) {
 		return g.getLocally(key)
 	})
 	if err == nil {
-		return view.(ByteView), nil
+		return val.(ByteView), nil
 	}
 	return ByteView{}, err
 }
@@ -99,6 +100,10 @@ func (g *Group) load(key string) (ByteView, error) {
 func (g *Group) getLocally(key string) (ByteView, error) {
 	bytes, err := g.retriever.Retrieve(key) // 实际上就是执行RetrieverFunc函数
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			global.Log.Warnf("对于不存在的 key，为了防止缓存穿透，先存入缓存中并设置合理过期时间")
+			g.mainCache.add(key, ByteView{})
+		}
 		return ByteView{}, err
 	}
 	value := ByteView{b: cloneBytes(bytes)}

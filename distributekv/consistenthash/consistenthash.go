@@ -54,8 +54,9 @@ func (m *Map) GetTruthNode(key string) string {
 		return m.keys[i] >= hash
 	})
 
-	global.Log.Infof("计算出 key:%s 的 hash: %d, 顺时针选择的虚拟节点下标 idx: %d", key, hash, idx)
-	global.Log.Infof("选择的真实节点：%s", m.hashMap[m.keys[idx%len(m.keys)]])
+	global.Log.Infof("计算出 key:%s 的 hash: %d", key, hash)
+	global.Log.Infof("顺时针选择的虚拟节点下标 idx: %d", idx)
+	global.Log.Infof("选择的真实节点：[%s]", m.hashMap[m.keys[idx%len(m.keys)]])
 
 	return m.hashMap[m.keys[idx%len(m.keys)]]
 }
