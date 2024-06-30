@@ -208,3 +208,13 @@ curl "http://localhost:8000/api?key=张三"
 - 本轮子项目参考了 geecache、groupcache、gcache 等项目，对项目中每个模块的设计和实现进行了详细分析；
 - geecache 中实现了基于 http 协议的分布式集群节点之间的通信，但并未完全实现基于 RPC 的通信，本项目参考 grpc 和 protobuf 官方文档，实现了基于 RPC 的远程过程调用，并给出了自动化测试脚本；
 - 除此之外，实现了基于 etcd 集群的服务注册发现功能，服务实例在启动时将服务地址注册到 etcd，客户端根据服务名即可从 etcd 获取指定服务的 grpc 连接，然后创建 client stub 完成 RPC 调用。
+
+## 参考资源链接
+
+1. [Geektutu 分布式缓存 `GeeCache`](https://geektutu.com/post/geecache.html) 
+2. [ggcache分布式缓存系统](https://github.com/1055373165/ggcache)
+3. [groupcache 瑞士军刀](https://github.com/golang/groupcache) 
+4. [ `gRPC` 官方文档](https://grpc.io/docs/languages/go/quickstart/)
+5. [`protobuf` 官方文档](https://protobuf.dev/programming-guides/proto3/) 
+6. [etcd 官方文档](https://etcd.io/docs/v3.5/) 
+7. [ `etcd` 集群搭建](https://github.com/mattn/goreman)
